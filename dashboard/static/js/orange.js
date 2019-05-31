@@ -57,6 +57,52 @@
 
                 _this.resetAddExtractionBtn();
             });
+
+        },
+
+        //header 增加、删除按钮事件
+        initHeaderAddOrRemove: function () {
+            // console.log("initHeaderAddOrRemove");
+            //添加规则框里的事件
+            //点击“加号“添加新的输入行
+            $(document).on('click', '#header-area .pair .btn-add', function(event){
+                // console.log('addNewHeader');
+                var self = $(this);
+                var row = self.parents('.header-holder');
+                var new_row = row.clone(true);
+                $(new_row).insertAfter($(this).parents('.header-holder'));
+                _this.resetAddheaderHeaderBtn();
+            });
+
+            //删除输入行
+            $(document).on('click', '#header-area .pair .btn-remove', function (event) {
+                // console.log("#header-area .pair .btn-remove");
+                $(this).parents('.form-group').remove();//删除本行输入
+                _this.resetAddExtractionBtn();
+            });
+        },
+
+        initHeaderAddBtnEvent:function () {
+            // console.log("initHeaderAddBtnEvent");
+
+            $(document).on('click', '#add-header-btn', function () {
+                // console.log("add-header-btn");
+                var row;
+                var current_es = $('.header-holder');
+                if (current_es && current_es.length) {
+                    row = current_es[current_es.length - 1];
+                }
+                if (row) {//至少存在了一个提取项
+                    var new_row = $(row).clone(true);
+                    // $(new_row).find("label").text("");
+                    $("#header-area").append($(new_row));
+                } else {//没有任何提取项，从模板创建一个
+                    var html = $("#single-header-tmpl").html();
+                    $("#header-area").append(html);
+                }
+
+                _this.resetAddheaderHeaderBtn();
+            });
         },
 
         //selector类型选择事件
@@ -93,7 +139,7 @@
             $(document).on("change", 'select[name=rule-judge-condition-type]', function () {
                 var condition_type = $(this).val();
 
-                if (condition_type != "Header" && condition_type != "Query" && condition_type != "PostParams") {
+                if (condition_type != "Header" && condition_type != "Query" && condition_type != "Cookie" && condition_type != "PostParams") {
                     $(this).parents(".condition-holder").each(function () {
                         $(this).find(".condition-name-hodler").hide();
                     });
@@ -127,6 +173,7 @@
                 var extraction_type = $(this).val();
 
                 if (extraction_type != "Header" && extraction_type != "Query"
+                    && extraction_type != "Cookie"
                     && extraction_type != "PostParams" && extraction_type != "URI") {
                     $(this).parents(".extraction-holder").each(function () {
                         $(this).find(".extraction-name-hodler").hide();
@@ -265,7 +312,7 @@
                 var condition_type = self.find("select[name=rule-judge-condition-type]").val();
                 condition.type = condition_type;
 
-                if (condition_type == "Header" || condition_type == "Query" || condition_type == "PostParams") {
+                if (condition_type == "Header" || condition_type == "Query" || condition_type == "Cookie" || condition_type == "PostParams") {
                     var condition_name = self.find("input[name=rule-judge-condition-name]").val();
                     if (!condition_name) {
                         tmp_success = false;
@@ -376,7 +423,7 @@
                 extraction.type = type;
 
                 //如果允许子key则提取
-                if (type == "Header" || type == "Query" || type == "PostParams"|| type == "URI") {
+                if (type == "Header" || type == "Query" || type == "Cookie" || type == "PostParams" || type == "URI") {
                     var name = self.find("input[name=rule-extractor-extraction-name]").val();
                     if (!name) {
                         tmp_success = false;
@@ -386,7 +433,7 @@
                 }
 
                 //如果允许默认值则提取
-                var allow_default = (type == "Header" || type == "Query" || type == "PostParams"|| type == "Host"|| type == "IP"|| type == "Method");
+                var allow_default = (type == "Header" || type == "Query" || type == "Cookie"  || type == "PostParams" || type == "Host"|| type == "IP" || type == "Method");
                 var has_default = self.find("select[name=rule-extractor-extraction-has-default]").val();
                 if (allow_default && has_default=="1") {//只有允许提取&&有默认值的才取默认值
                     var default_value = self.find("div[name=rule-extractor-extraction-default]>input").val();
@@ -408,6 +455,60 @@
             result.data.extractor.type = extractor_type;
             result.data.extractor.extractions = extractions;
             result.success = true;
+            return result;
+        },
+
+        buildHeader:function () {
+            // console.log('buildHeader');
+            var result = {
+                success: false,
+                data: {
+                    headers: {}
+                }
+            };
+            var headers = [];
+            var tmp_success = true;
+            var tmp_tip = "";
+            $(".header-holder").each(function () {
+                var self = $(this);
+                var header = {};
+
+                //提取类型
+                var type = self.find("select[name=rule-header-type]").val();
+                header.type = type;
+                // console.log(type)
+                var override = self.find("select[name=rule-header-override]").val();
+                header.override = override;
+
+                //提取 header name
+                var name = self.find("input[name=rule-header-name-default]").val();
+                if (!name) {
+                    tmp_success = false;
+                    tmp_tip = "header name 字段不得为空";
+                }
+                header.name = name;
+
+                // 提取 header value
+                var value = self.find("input[name=rule-header-value-default]").val();
+                // console.log(value)
+                if (!value) {
+                    tmp_success = false;
+                    tmp_tip = "header value 字段不得为空";
+                }
+
+                header.value = value;
+                headers.push(header);
+
+            });
+
+            if(!tmp_success){
+                result.success = false;
+                result.data = tmp_tip;
+                return result
+            }
+            result.data.headers = headers;
+            result.success = true;
+            // console.log(headers);
             return result;
         },
 
@@ -499,11 +600,25 @@
             $(new_row).insertAfter($(this).parents('.extraction-holder'))
             _this.resetAddExtractionBtn();
         },
-
         resetAddExtractionBtn: function () {
             var l = $("#extractor-area .pair").length;
             var c = 0;
             $("#extractor-area .pair").each(function () {
+                c++;
+                if (c == l) {
+                    $(this).find(".btn-add").show();
+                    $(this).find(".btn-remove").show();
+                } else {
+                    $(this).find(".btn-add").hide();
+                    $(this).find(".btn-remove").show();
+                }
+            })
+        },
+        resetAddheaderHeaderBtn:function () {
+            // console.log('resetAddheaderHeaderBtn');
+            var l = $("#header-area .pair").length;
+            var c = 0;
+            $("#header-area .pair").each(function () {
                 c++;
                 if (c == l) {
                     $(this).find(".btn-add").show();
@@ -1015,7 +1130,7 @@
                         autofocus: false,
                         callback: function () {
                             var result = _this.buildSelector();
-                            console.log(result);
+                            // console.log(result);
                             if (result.success) {
                                 $.ajax({
                                     url: '/' + op_type + '/selectors',
@@ -1398,6 +1513,7 @@
                         //重新设置数据
                         context.data.selector_rules = context.data.selector_rules || {};
                         context.data.selector_rules[selector_id] = result.data.rules;
+                        context.renderRulesCallback && context.renderRulesCallback(result.data.rules);
                         _this.renderRules(result.data);
                     } else {
                         _this.showErrorTip("错误提示", "查询" + op_type + "规则发生错误");

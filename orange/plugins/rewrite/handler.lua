@@ -36,10 +36,11 @@ local function filter_rules(sid, plugin, ngx_var_uri)
                             ngx.log(ngx.INFO, "[Rewrite] ", ngx_var_uri, " to:", to_rewrite)
                         end
 
-                        local from, to, err = ngx_re_find(to_rewrite, "[%?]{1}", "jo")
+                        local from, to, err = ngx_re_find(to_rewrite, "[?]{1}", "jo")
                         if not err and from and from >= 1 then
                             --local qs = ngx_re_sub(to_rewrite, "[A-Z0-9a-z-_/]*[%?]{1}", "", "jo")
                             local qs = string_sub(to_rewrite, from+1)
+                            to_rewrite = string_sub(to_rewrite, 1, from-1)
                             if qs then
                                 local args = ngx_decode_args(qs, 0)
                                 if args then 
@@ -97,20 +98,14 @@ function RewriteHandler:rewrite(conf)
                 end
 
                 local stop = filter_rules(sid, "rewrite", ngx_var_uri)
-                if stop then -- 不再执行此插件其他逻辑
+                local selector_continue = selector.handle and selector.handle.continue
+                if stop or not selector_continue then -- 不再执行此插件其他逻辑
                     return
                 end
             else
                 if selector.handle and selector.handle.log == true then
                     ngx.log(ngx.INFO, "[Rewrite][NOT-PASS-SELECTOR:", sid, "] ", ngx_var_uri)
                 end
-            end
-
-            -- if continue or break the loop
-            if selector.handle and selector.handle.continue == true then
-                -- continue next selector
-            else
-                break
             end
         end
     end

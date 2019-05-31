@@ -4,9 +4,11 @@ local table_sort = table.sort
 local pcall = pcall
 local require = require
 require("orange.lib.globalpatches")()
+local ck = require("orange.lib.cookie")
 local utils = require("orange.utils.utils")
 local config_loader = require("orange.utils.config_loader")
 local dao = require("orange.store.dao")
+local dns_client = require("resty.dns.client")
 
 local HEADERS = {
     PROXY_LATENCY = "X-Orange-Proxy-Latency",
@@ -74,10 +76,16 @@ function Orange.init(options)
         os.exit(1)
     end
 
+    local consul = require("orange.plugins.consul_balancer.consul_balancer")
+    consul.set_shared_dict_name("consul_upstream", "consul_upstream_watch")
     Orange.data = {
         store = store,
-        config = config
+        config = config,
+        consul = consul
     }
+
+    -- init dns_client
+    assert(dns_client.init())
 
     return config, store
 end
@@ -87,14 +95,20 @@ function Orange.init_worker()
     math.randomseed()
     -- 初始化定时器，清理计数器等
     if Orange.data and Orange.data.store and Orange.data.config.store == "mysql" then
-        local worker_id = ngx.worker.id()
-        if worker_id == 0 then
             local ok, err = ngx.timer.at(0, function(premature, store, config)
                 local available_plugins = config.plugins
                 for _, v in ipairs(available_plugins) do
                     local load_success = dao.load_data_by_mysql(store, v)
                     if not load_success then
                         os.exit(1)
+                    end
+                    
+                    if v == "consul_balancer" then
+                        for ii,p in ipairs(loaded_plugins) do
+                            if v == p.name then
+                                p.handler.db_ready()
+                            end
+                        end
                     end
                 end
             end, Orange.data.store, Orange.data.config)
@@ -103,7 +117,6 @@ function Orange.init_worker()
                 ngx.log(ngx.ERR, "failed to create the timer: ", err)
                 return os.exit(1)
             end
-        end
     end
 
     for _, plugin in ipairs(loaded_plugins) do
@@ -111,6 +124,14 @@ function Orange.init_worker()
     end
 end
 
+function Orange.init_cookies()
+    ngx.ctx.__cookies__ = nil
+
+    local COOKIE, err = ck:new()
+    if not err and COOKIE then
+        ngx.ctx.__cookies__ = COOKIE
+    end
+end
 
 function Orange.redirect()
     ngx.ctx.ORANGE_REDIRECT_START = now()
@@ -151,6 +172,11 @@ function Orange.access()
     ngx.ctx.ACCESSED = true
 end
 
+function Orange.balancer()
+    for _, plugin in ipairs(loaded_plugins) do
+        plugin.handler:balancer()
+    end
+end
 
 function Orange.header_filter()
 
@@ -176,6 +202,9 @@ function Orange.body_filter()
     end
 
     if ngx.ctx.ACCESSED then
+        if ngx.ctx.ORANGE_HEADER_FILTER_STARTED_AT == nil then
+            ngx.ctx.ORANGE_HEADER_FILTER_STARTED_AT = 0
+        end
         ngx.ctx.ORANGE_RECEIVE_TIME = now() - ngx.ctx.ORANGE_HEADER_FILTER_STARTED_AT
     end
 end

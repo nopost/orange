@@ -1,17 +1,22 @@
 {
     "plugins": [
         "stat",
+        "headers",
         "monitor",
+        "dynamic_upstream",
         "redirect",
         "rewrite",
         "rate_limiting",
         "property_rate_limiting",
         "basic_auth",
         "key_auth",
+        "jwt_auth",
+        "hmac_auth",
         "signature_auth",
         "waf",
         "divide",
-        "kvstore"
+        "kvstore",
+        "balancer"
     ],
     "store": "mysql",
     "store_mysql": {
@@ -22,6 +27,7 @@
             "database": "orange",
             "user": "root",
             "password": "",
+            "charset": "utf8",
             "max_packet_size": 1048576
         },
         "pool_config": {
